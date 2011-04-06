@@ -1,13 +1,16 @@
 import simpleML.*;
 import org.json.*;
-import java.util.Map;
 
 /* 
   Request types:
   findAllGamesRequest: called to determine next game to run
   getGameRequest: called to get listings for current game
 */
-HTMLRequest findAllGamesRequest, getGameRequest, listRequest;
+HTMLRequest findAllGamesRequest, 
+  getGameRequest, 
+  updateGameListingsRequest, 
+  updateGameFinishedRequest,
+  listRequest;
 
 
 // Game world variables
@@ -18,24 +21,28 @@ int lastGameID = 0;
 Coord[] origins = new Coord[9];
 Coord curPos;
 int curPosKey = 0;
-int offset = 25;
+int offset = 42;
+int rectSize = 180;
+int boardSize = 700;
+
+PImage loadingAnim;
+float animAngle = 0;
 
 // Label board
 PFont font = createFont(PFont.list()[1], 32);
-PFont mcHugeLarge = createFont(PFont.list()[1], 60);
+PFont bigFont = createFont(PFont.list()[1], 90);
 
 Timer timer;
-Timer fontTimer;
 boolean endImageDisplay = false;
 
 
 String source = "";
-color back = color(0, 255, 100);    // Background brightness
 
 void setup() {
-  size(400,400);
+  size(boardSize - 20, boardSize + 60);
   background(0);
- //listRequest = new HTMLRequest(this,"http://api.alacenski.ny4dev.etsy.com/v2/makerfaire/");
+  loadingAnim = loadImage("extras/rokali.jpg");
+ //listRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/");
  //listRequest.makeRequest();
   // set up target origins
   origins[0] = new Coord(0, 0);
@@ -48,44 +55,48 @@ void setup() {
   origins[7] = new Coord(1, 2);
   origins[8] = new Coord(2, 2);
   
-  // Create and make an asynchronous request
   // set up request types
-  findAllGamesRequest = new HTMLRequest(this,"http://api.alacenski.ny4dev.etsy.com/v2/makerfaire/games?status=ready&limit=1");
+  findAllGamesRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games?status=ready&limit=1");
   timer = new Timer(2000); // display image in millis
-  fontTimer = new Timer(30);
   textFont(font);
 }
 
 void draw() {
   // Fill background
   background(255);
+  fill(255, 143, 0);
+  text("Etsy Whack-A-Treasury!", offset, 45);
   // draw image target board
-  stroke(0);
-  textFont(font);
+  
   for (int i = 0; i < 9; i++) {
     Coord coord = origins[i];
     int offsetX = (coord.x * 5 * offset) + offset;
-    int offsetY = (coord.y * 5 * offset) + offset;
-    fill(40);
-    rect(offsetX, offsetY, 75, 75);
-    fill(180, 180, 255);
-    text(i+1, offsetX + 10, offsetY + 36);
+    int offsetY = (coord.y * 5 * offset) + offset + 20;
+    stroke(208, 211,179);
+    fill(224,228,204);
+    rect(offsetX, offsetY, rectSize, rectSize);
+    fill(255, 182, 88);
+    textFont(bigFont);
+    text(i+1, offsetX + 60, offsetY + 120);
+    
+    textFont(font);
   }
   
   // if game state ID is set
   if (gameID > 0) {    
     if (gameID != lastGameID) {
+      
       // if game is new
       // should this run during the endgame state or at init?
-      lastGameID = gameID; // get this out of the way
       g = new Game(gameID); // start that game up
-       
-      
+      lastGameID = gameID;
+      // reset background animations 
+      animAngle = 0.0;
       // initialize new game
     } else { // still playing the same game
       // run the game
       
-      getGameRequest = new HTMLRequest(this,"http://api.alacenski.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=ready&includes=GameListings");
+      getGameRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=ready&includes=GameListings");
       if (g.listingRequestSent) {
         if (g.isReady() == true) {
           // start showing images
@@ -93,11 +104,32 @@ void draw() {
             renderImage(curPos);
           } else {
             if (g.listings.size() > 0) {
-              updatePos();
-              g.setNextListing();
-              println("Currently displaying " + g.curListing.getListingID() + " at " + (curPosKey+1));
-              // todo: figure out how to end correctly
-              timer.start();
+              if (g.successfulHits <= 12) {
+                updatePos();
+                g.setNextListing(); // next curListing is ready
+                
+                println("Currently displaying " + g.curListing.getListingID() + " at " + (curPosKey+1));
+                // todo: figure out how to end correctly
+                timer.start();
+              } else {
+                // Game is over
+                updateGameFinishedRequest = new HTMLRequest(this, "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=played&method=PUT");
+                updateGameFinishedRequest.makeRequest(); // Send current game status 
+                
+                // trigger new game from here
+                
+                // eeee                
+                background(255);
+                textFont(bigFont);
+                fill(255, 0, 0);
+                text("a winner is you", 10, 120); // WIN
+  
+                animAngle += HALF_PI / 24.0;                  
+                   translate(boardSize/2, boardSize/2);
+                   rotate(animAngle);
+                   translate(-258/2, -356/2);
+                   image(loadingAnim, 0, 0);                                  
+              }
             } else {
               // No more listings!
               // endgame state lives here
@@ -105,6 +137,7 @@ void draw() {
               println("GAME IS OUT OF LISTINGS");
               println("START NEW GAME?");
               delay(10000);
+              exit();
             }
           } // end timer loop
         }
@@ -113,29 +146,32 @@ void draw() {
         g.listingRequestSent = true;
       }
     }
-  } // if game id is set
+  } else { // if game id is set {
+    fill(105, 210, 231);
+    text("Click to start", offset, 720);
+  }
 }
 
 void mousePressed() {
     findAllGamesRequest.makeRequest();
     println("requested");
+    updatePos();
 }
 
 void keyPressed() {
-  fontTimer.start();
-  textFont(mcHugeLarge);
-  fill(255, 0, 0);
+  // set up whack event
+  // prepare hit request, but don't make it until hit
+  String thisShit = "whacked"; // yo
+  
   Integer k = (Integer)Character.digit(key, 10);
   if (k.equals((Integer)curPosKey+1)) {
-    println("win");
-    for(int j = 0; j < 1000; j++) {
-      text("YAY", 10, 300);
-    }
+    g.successfulHits++;
+    updateGameListingsRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
+    updateGameListingsRequest.makeRequest(); 
   } else {
-    while(!fontTimer.isFinished()) {
-      text("FUCK", 10, 300);
-    }
+    println("BOO!"); 
   }
+  g.totalHits++;
 }
 
 // When a request is finished
@@ -145,40 +181,50 @@ void netEvent(HTMLRequest ml) {
   //Parse response for type, get data out
   try {
     JSONObject response = new JSONObject(source);
-    JSONArray results = response.getJSONArray("results");
-    String method = (String)response.get("api_method");
-
-    // set game state based on method called
-    if (method.equals("findAllGames")) { // get a game ID to initialize the new game
-      // set game ID
-      // required to start game
-      JSONObject jsonGame = (JSONObject)results.get(0);
-      String id = jsonGame.get("game_id").toString();
-      gameID = Integer.parseInt(id);
-    } else if (method.equals("getGame")) { // make listing ids available to the current Game
-      /* 
-        this is not a good way to do this 
-        (should be in Game constructor), 
-        but listings must be pulled from game environment to be handled with netEvent 
-      */
-      JSONObject jsonGame = (JSONObject)results.get(0);
-      JSONArray gameListings = jsonGame.getJSONArray("GameListings");
-      
-      g.loadListings(gameListings);
+    JSONArray results = new JSONArray();
+    
+    if (!(response.get("results").equals(null))) {
+      results = response.getJSONArray("results");
+    } else {
+      println("Empty game response! Try again");
     }
-      
+    
+    String method = (String)response.get("api_method");
+    if (!(response.get("results").equals(null))) { // if there are results
+      // set game state based on method called
+      if (method.equals("findAllGames")) { // get a game ID to initialize the new game
+        // set game ID
+        // required to start game
+        JSONObject jsonGame = (JSONObject)results.get(0);
+        String id = jsonGame.get("game_id").toString();
+        gameID = Integer.parseInt(id);
+      } else if (method.equals("getGame")) { // make listing ids available to the current Game
+        /* 
+          this is not a good way to do this 
+          (should be in Game constructor), 
+          but listings must be pulled from game environment to be handled with netEvent 
+        */
+        JSONObject jsonGame = (JSONObject)results.get(0);
+        JSONArray gameListings = jsonGame.getJSONArray("GameListings");
+        
+        g.loadListings(gameListings);
+      } else if (method.equals("updateGameListings")) { // send a hit
+        // do nothing
+      } else if (method.equals("updateGame")) {
+      }
+    }
   } catch (JSONException e) {
     e.printStackTrace();
   }
 }
 
-void renderImage(Coord pos) {  
+void renderImage(Coord pos) {
   int offsetX = (pos.x * 5 * offset) + offset;
-  int offsetY = (pos.y * 5 * offset) + offset;
+  int offsetY = (pos.y * 5 * offset) + offset + 20;
   //println("Running at " + pos.x + ", " + pos.y);
   stroke(0, 100, 255);
   Listing current = g.curListing; 
-  image(current.getImage(), offsetX, offsetY);
+  image(current.getImage(), offsetX, offsetY, rectSize, rectSize);
 } 
 
 void updatePos() {
