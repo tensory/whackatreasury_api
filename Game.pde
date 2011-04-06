@@ -4,8 +4,8 @@ class Game {
   int gameID;
   boolean active = false;
   int totalHits;
-  int successfulHits;
   int treasurySize;
+  int successfulHits;
   boolean listingRequestSent = false;
   private boolean ready;
   
@@ -19,7 +19,7 @@ class Game {
     active = true;
     totalHits = 0;
     successfulHits = 0;
-    treasurySize = 0;
+    treasurySize = 12;
     ready = false;
   }
   
