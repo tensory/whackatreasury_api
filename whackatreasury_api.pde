@@ -1,3 +1,8 @@
+/**
+Whack-A-Treasury
+by Ari Lacenski for Etsy / 2011
+*/
+
 import simpleML.*;
 import org.json.*;
 
@@ -24,6 +29,7 @@ int curPosKey = 0;
 int offset = 42;
 int rectSize = 180;
 int boardSize = 700;
+int treasurySize = 3;
 
 PImage loadingAnim;
 float animAngle = 0;
@@ -34,7 +40,7 @@ PFont bigFont = createFont(PFont.list()[1], 90);
 
 Timer timer;
 boolean endImageDisplay = false;
-
+boolean hasRequestedNewGame = false;
 
 String source = "";
 
@@ -42,8 +48,8 @@ void setup() {
   size(boardSize - 20, boardSize + 60);
   background(0);
   loadingAnim = loadImage("extras/rokali.jpg");
- //listRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/");
- //listRequest.makeRequest();
+  listRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/");
+  listRequest.makeRequest();
   // set up target origins
   origins[0] = new Coord(0, 0);
   origins[1] = new Coord(1, 0);
@@ -57,6 +63,7 @@ void setup() {
   
   // set up request types
   findAllGamesRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games?status=ready&limit=1");
+  
   timer = new Timer(2000); // display image in millis
   textFont(font);
 }
@@ -85,7 +92,6 @@ void draw() {
   // if game state ID is set
   if (gameID > 0) {    
     if (gameID != lastGameID) {
-      
       // if game is new
       // should this run during the endgame state or at init?
       g = new Game(gameID); // start that game up
@@ -96,7 +102,7 @@ void draw() {
     } else { // still playing the same game
       // run the game
       
-      getGameRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=ready&includes=GameListings");
+      getGameRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=ready&includes=GameListings"); // 
       if (g.listingRequestSent) {
         if (g.isReady() == true) {
           // start showing images
@@ -104,7 +110,7 @@ void draw() {
             renderImage(curPos);
           } else {
             if (g.listings.size() > 0) {
-              if (g.successfulHits <= 12) {
+              if (g.successfulHits <= treasurySize) {
                 updatePos();
                 g.setNextListing(); // next curListing is ready
                 
@@ -115,8 +121,10 @@ void draw() {
                 // Game is over
                 updateGameFinishedRequest = new HTMLRequest(this, "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=played&method=PUT");
                 updateGameFinishedRequest.makeRequest(); // Send current game status 
-                
+                hasRequestedNewGame = false;
                 // trigger new game from here
+                
+                gameID = -1; // set to -1 so that next draw loop will trigger new game start
                 
                 // eeee                
                 background(255);
@@ -146,16 +154,32 @@ void draw() {
         g.listingRequestSent = true;
       }
     }
-  } else { // if game id is set {
-    fill(105, 210, 231);
-    text("Click to start", offset, 720);
+  } else { // if game id is not set 
+      
+    
+    if (gameID == -1) { // special case for restarting
+      drawWaitingState("Waiting for next game");      
+      g = null; // explicitly null old Game object
+      if (hasRequestedNewGame == false) {
+        findAllGamesRequest.makeRequest();
+        hasRequestedNewGame = true;
+        updatePos();
+      }
+    } else if (gameID == 0) {
+      drawWaitingState("Click to start");      
+    }
   }
 }
 
 void mousePressed() {
+  if (hasRequestedNewGame == false) {
     findAllGamesRequest.makeRequest();
+    hasRequestedNewGame = true;
     println("requested");
     updatePos();
+  } else {
+    println("Already requested");
+  }
 }
 
 void keyPressed() {
@@ -164,14 +188,19 @@ void keyPressed() {
   String thisShit = "whacked"; // yo
   
   Integer k = (Integer)Character.digit(key, 10);
-  if (k.equals((Integer)curPosKey+1)) {
-    g.successfulHits++;
-    updateGameListingsRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
-    updateGameListingsRequest.makeRequest(); 
-  } else {
-    println("BOO!"); 
+  if (g.hashCode() > 0) {
+    if (k.equals((Integer)curPosKey+1)) {
+      g.successfulHits++;
+      updateGameListingsRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
+      updateGameListingsRequest.makeRequest(); 
+    } 
+    
+    /*else {
+      println("BOO!"); 
+    }
+    */
+    g.totalHits++;
   }
-  g.totalHits++;
 }
 
 // When a request is finished
@@ -186,6 +215,7 @@ void netEvent(HTMLRequest ml) {
     if (!(response.get("results").equals(null))) {
       results = response.getJSONArray("results");
     } else {
+      drawWaitingState("Waiting for a game entry");
       println("Empty game response! Try again");
     }
     
@@ -230,4 +260,10 @@ void renderImage(Coord pos) {
 void updatePos() {
   curPosKey = (int)random(0, 8);
   curPos = origins[curPosKey];
+}
+
+void drawWaitingState(String message) {
+  background(0);
+  fill(105, 210, 231);
+  text(message, offset, 720);
 }
