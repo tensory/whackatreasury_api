@@ -20,6 +20,7 @@ int offset = 42;
 int rectSize = 180;
 int boardSize = 700;
 int treasurySize = 3;
+int deadGameCount = 0;
 
 PImage loadingAnim;
 float animAngle = 0;
@@ -76,6 +77,7 @@ void draw() {
     if (gameID != lastGameID) {
       println(gameID);
       println(lastGameID);
+      g = null;
       g = new Game(gameID);
       lastGameID = gameID;     
     } else { // Play through game since its ID exists
@@ -83,9 +85,43 @@ void draw() {
       
       if (g.listingRequestSent) {
         if (g.isReady()) {
-          println(g.gameID);
-          exit();
-        } 
+          if (!timer.isFinished()) {
+            renderImage(curPos);
+          } else {
+            if (g.listings.size() > 0) {
+              if (g.successfulHits <= treasurySize) {
+                updatePos();
+                g.setNextListing(); // next curListing is ready
+                
+                println("Currently displaying " + g.curListing.getListingID() + " at " + (curPosKey+1));
+                // todo: figure out how to end correctly
+                timer.start();
+              } else {
+                // Game is over
+                updateGameFinishedRequest = new HTMLRequest(this, "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=played&method=PUT");
+                updateGameFinishedRequest.makeRequest(); // Send current game status 
+                newGameRequested = false;
+                // trigger new game from here
+                
+                gameID = -1; // set to -1 so that next draw loop will trigger new game start
+                
+                // eeee                
+                background(255);
+                textFont(bigFont);
+                fill(255, 0, 0);
+                text("a winner is you", 10, 120); // WIN
+  
+                animAngle += HALF_PI / 24.0;                  
+                   translate(boardSize/2, boardSize/2);
+                   rotate(animAngle);
+                   translate(-258/2, -356/2);
+                   image(loadingAnim, 0, 0);                                  
+              }
+            } else {
+              println("No llistings");
+            }
+          } // end else case for timer
+        } // end check for ready
       } else {
           getGameRequest.makeRequest();
           println("made game request");
@@ -96,7 +132,6 @@ void draw() {
     if (gameID == 0) {
 //      drawWaitingState("Waiting for new game");
     } else if (gameID == -1) {
-      println("Request next game");
       startNewGame();
     }
   } 
@@ -112,7 +147,7 @@ void netEvent(HTMLRequest ml) {
     if (!(response.get("results").equals(null))) {
       // response!
       results = response.getJSONArray("results");
-      println(results);
+      //println(results);
       String method = (String)response.get("api_method");
       if (method.equals("findAllGames")) { // get a game ID to initialize the new game
         //newGameRequested = false; // reset requested state to false
@@ -128,21 +163,15 @@ void netEvent(HTMLRequest ml) {
           (should be in Game constructor), 
           but listings must be pulled from game environment to be handled with netEvent 
         */
-        newGameRequested = false;
         JSONObject jsonGame = (JSONObject)results.get(0);
         JSONArray gameListings = null;
+          
         try {
           gameListings = jsonGame.getJSONArray("GameListings");
           g.loadListings(gameListings); // load listings, which will set game state to ready
-        } catch (Exception e) {
-          if (gameListings == null) {
+         } catch (Exception e) {
             println("The last game loaded had null listings!");
-          }
-            // if gameListings is null, this game is badly formed
-            /*
-            String error = "Game " + jsonGame.get("game_id") + " (" + jsonGame.get("player") + ") did not initialize. Requesting next game.";
-            println(error);
-*/
+          
 
           updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + jsonGame.get("game_id") + "/?status=played&method=PUT");
           updateGameFinishedRequest.makeRequest(); // Send current game status
@@ -155,7 +184,11 @@ void netEvent(HTMLRequest ml) {
     } else { // no response
 //      drawWaitingState("Waiting for a game entry");
       println("Empty game response! Try again");
+      deadGameCount++;
       newGameRequested = false;
+      if (deadGameCount > 100) {
+        exit();
+      }
     }
   } catch (JSONException e) {
     e.printStackTrace();
@@ -240,5 +273,6 @@ void keyPressed() { // this will become serialEvent
       }
     } 
     g.totalHits++;
+    timer.reset();
   }
 }

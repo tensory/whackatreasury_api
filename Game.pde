@@ -26,7 +26,7 @@ class Game {
   
   void loadListings(JSONArray listings) {
     // limit listings to 15 just for the local demo. Remove when using full set of Etsy images
-     
+
     try {
       for (int j = 0; j < listings.length(); j++) {
         JSONObject listing = (JSONObject)listings.get(j); 
