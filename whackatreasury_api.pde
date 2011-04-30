@@ -19,7 +19,7 @@ int curPosKey = 0;
 int offset = 42;
 int rectSize = 180;
 int boardSize = 700;
-int treasurySize = 3;
+int treasurySize = 2;
 int deadGameCount = 0;
 
 PImage loadingAnim;
@@ -75,8 +75,6 @@ void draw() {
   drawBoard();
   if (gameID > 0) {
     if (gameID != lastGameID) {
-      println(gameID);
-      println(lastGameID);
       g = null;
       g = new Game(gameID);
       lastGameID = gameID;     
@@ -104,27 +102,15 @@ void draw() {
                 // trigger new game from here
                 
                 gameID = -1; // set to -1 so that next draw loop will trigger new game start
-                
-                // eeee                
-                background(255);
-                textFont(bigFont);
-                fill(255, 0, 0);
-                text("a winner is you", 10, 120); // WIN
-  
-                animAngle += HALF_PI / 24.0;                  
-                   translate(boardSize/2, boardSize/2);
-                   rotate(animAngle);
-                   translate(-258/2, -356/2);
-                   image(loadingAnim, 0, 0);                                  
               }
             } else {
-              println("No llistings");
+              println("No listings");
             }
           } // end else case for timer
         } // end check for ready
       } else {
           getGameRequest.makeRequest();
-          println("made game request");
+//          println("made game request");
           g.listingRequestSent = true;
       }
     }
@@ -133,8 +119,12 @@ void draw() {
 //      drawWaitingState("Waiting for new game");
     } else if (gameID == -1) {
       startNewGame();
+      timer.reset();
     }
-  } 
+  }
+ if (deadGameCount > 100) {
+    exit();
+ } 
 }
 
 // in response from simpleML, set gameRequested back to false
@@ -147,7 +137,6 @@ void netEvent(HTMLRequest ml) {
     if (!(response.get("results").equals(null))) {
       // response!
       results = response.getJSONArray("results");
-      //println(results);
       String method = (String)response.get("api_method");
       if (method.equals("findAllGames")) { // get a game ID to initialize the new game
         //newGameRequested = false; // reset requested state to false
@@ -170,25 +159,21 @@ void netEvent(HTMLRequest ml) {
           gameListings = jsonGame.getJSONArray("GameListings");
           g.loadListings(gameListings); // load listings, which will set game state to ready
          } catch (Exception e) {
-            println("The last game loaded had null listings!");
-          
-
+          //  println("The last game loaded had null listings!");
           updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + jsonGame.get("game_id") + "/?status=played&method=PUT");
           updateGameFinishedRequest.makeRequest(); // Send current game status
-          gameID = -1;  
+          gameID = -1;
+          deadGameCount++;  
         }
       } else if (method.equals("updateGameListings")) { // send a hit
         // do nothing
       } else if (method.equals("updateGame")) {
       }
     } else { // no response
-//      drawWaitingState("Waiting for a game entry");
-      println("Empty game response! Try again");
+      // drawWaitingState("Waiting for a game entry");
+      // println("Empty game response! Try again");
       deadGameCount++;
       newGameRequested = false;
-      if (deadGameCount > 100) {
-        exit();
-      }
     }
   } catch (JSONException e) {
     e.printStackTrace();
@@ -268,11 +253,10 @@ void keyPressed() { // this will become serialEvent
     if (k.equals((Integer)curPosKey+1)) {
       g.successfulHits++;
       if (g.successfulHits <= treasurySize) {
-        updateGameListingsRequest = new HTMLRequest(this, apiBase + "/games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
+        updateGameListingsRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
         updateGameListingsRequest.makeRequest(); 
       }
     } 
     g.totalHits++;
-    timer.reset();
   }
 }
