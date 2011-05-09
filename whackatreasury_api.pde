@@ -13,12 +13,14 @@ int lastGameID = 0;
 boolean newGameRequested = false;
 String source = "";
 String apiBase = "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/";
-Coord[] origins = new Coord[9];
+int numSquares = 6;
+Coord[] origins = new Coord[numSquares];
 Coord curPos;
 int curPosKey = 0;
 int offset = 42;
 int rectSize = 180;
-int boardSize = 700;
+int boardX = 800;
+int boardY = 600;
 int treasurySize = 2;
 int deadGameCount = 0;
 
@@ -43,7 +45,7 @@ HTMLRequest findAllGamesRequest,
   listRequest;
 
 void setup() {
-  size(boardSize - 20, boardSize + 60);
+  size(boardX, boardY);
   background(255);
   loadingAnim = loadImage("extras/rokali.jpg");
   
@@ -58,9 +60,6 @@ void setup() {
   origins[3] = new Coord(0, 1);
   origins[4] = new Coord(1, 1);
   origins[5] = new Coord(2, 1);
-  origins[6] = new Coord(0, 2);
-  origins[7] = new Coord(1, 2);
-  origins[8] = new Coord(2, 2);
   
   // set up request types
   findAllGamesRequest = new HTMLRequest(this, apiBase + "games?status=ready&limit=1");
@@ -119,7 +118,6 @@ void draw() {
 //      drawWaitingState("Waiting for new game");
     } else if (gameID == -1) {
       startNewGame();
-      timer.reset();
     }
   }
  if (deadGameCount > 100) {
@@ -210,7 +208,7 @@ void renderImage(Coord pos) {
 } 
 
 void updatePos() {
-  curPosKey = (int)random(0, 8);
+  curPosKey = (int)random(0, numSquares-1);
   curPos = origins[curPosKey];
 }
 
@@ -227,7 +225,7 @@ void drawBoard() {
   text("Etsy Whack-A-Treasury!", offset, 45);
   // draw image target board
   
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < numSquares; i++) {
     Coord coord = origins[i];
     int offsetX = (coord.x * 5 * offset) + offset;
     int offsetY = (coord.y * 5 * offset) + offset + 20;
