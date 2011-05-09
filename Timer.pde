@@ -1,31 +1,27 @@
 class Timer {
-  int savedTime; //when timer started
-  int totalTime; // how long timer should last
-  boolean finished;
-  Timer (int tempTotalTime){
+  int savedTime; // When Timer started
+  int totalTime; // How long Timer should last
+  
+  Timer(int tempTotalTime) {
     totalTime = tempTotalTime;
-    finished=false;
   }
- 
-  //Starting the timer
-  void start(){
-   if(endImageDisplay == false) {
-      savedTime = millis(); //when the timer starts it stores the current time in milliseconds
-   }
+  
+  // Starting the timer
+  void start() {
+    // When the timer starts it stores the current time in milliseconds.
+    savedTime = millis(); 
   }
-  void reset() {
-    savedTime=0; 
+  
+  // The function isFinished() returns true if 5,000 ms have passed. 
+  // The work of the timer is farmed out to this method.
+  boolean isFinished() { 
+    // Check how much time has passed
+    int passedTime = millis()- savedTime;
+    if (passedTime > totalTime) {
+      return true;
+    } else {
+      return false;
+    }
   }
- 
- boolean isFinished(){
-   //Check how much time has passed
-   int passedTime = millis() - savedTime;
-   if(passedTime > totalTime){
-     finished = true;
-     return true;
-   } else{
-     finished = false;
-     return false;
-   }
- } 
 }
+
