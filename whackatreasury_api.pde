@@ -4,8 +4,14 @@ by Ari Lacenski for Etsy / 2011
 */
 
 import processing.serial.*;
+import ddf.minim.*;
 import simpleML.*;
 import org.json.*;
+
+// Audio
+Minim minim;
+AudioSnippet win;
+AudioSnippet fail;
 
 // Game world parameters
 Game g;
@@ -13,24 +19,34 @@ int gameID = 0;
 int lastGameID = 0;
 boolean newGameRequested = false;
 String source = "";
-String apiBase = "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/";
+String apiBase = "http://openapi.etsy.com/v2/makerfaire/";
+String apiKey = "39u9vrafahzsw66cvvh4j85x";
+PImage defaultImage;
 int numSquares = 6;
 Coord[] origins = new Coord[numSquares];
+// set up target origins
 Coord curPos;
 int curPosKey = 0;
+// Colors
+color redFill = color(206, 36, 45);
+color redStroke = color(125, 24, 30);
+color yellowFill = color(255, 226, 94);
+color yellowStroke = color(226, 190, 31);
+
 int offset = 34;
 int imgSize = 400;
-int rectSize = 150;
-int boardX = 1024;
-int boardY = 768;
-int treasurySize = 2;
+int rectSize = 320;
+int boardX = 1280;
+int boardY = 720;
+int treasurySize = 3;
 int deadGameCount = 0;
+long gameTimeLimit = 180000; // 3 minutes
+long startTime;
 
 Serial myPort;
 
 // Timing
 Timer timer;
-
 boolean killGameRequest = false;
 
 // Label board
@@ -45,14 +61,11 @@ HTMLRequest findAllGamesRequest,
   listRequest;
 
 void setup() {
+  gameID = 0;
+  startTime = millis();
   size(boardX, boardY);
+  frameRate(30);
   background(255);
-  
-  /*
-  listRequest = new HTMLRequest(this,"http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/");
-  listRequest.makeRequest();*/
-  
-  // set up target origins
   origins[0] = new Coord(0, 0);
   origins[1] = new Coord(1, 0);
   origins[2] = new Coord(2, 0);
@@ -61,13 +74,16 @@ void setup() {
   origins[5] = new Coord(2, 1);
   
   // set up request types
-  findAllGamesRequest = new HTMLRequest(this, apiBase + "games?status=ready&limit=1");
+  findAllGamesRequest = new HTMLRequest(this, apiBase + "games?status=ready&limit=1&api_key=" + apiKey);
   
-  timer = new Timer(2000); // display image in millis
+  minim = new Minim(this);
+  win = minim.loadSnippet("sounds/beep-10.mp3");
+  fail = minim.loadSnippet("sounds/beep-10.mp3");
+  timer = new Timer(5000); // display image in millis
+  
   myPort = new Serial(this, Serial.list()[0], 9600); // init serial port
-  
+  defaultImage = loadImage("extras/default.jpg");
   textFont(font);
-  drawBoard();
 }
 
 void draw() {
@@ -78,40 +94,38 @@ void draw() {
       g = null;
       g = new Game(gameID);
       lastGameID = gameID;
- 
-     
        // playable loop starts here     
     } else { // Play through game since its ID exists
-      println(g.gameID);
       gameID = g.gameID;
-      getGameRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/?status=ready&includes=GameListings"); // 
-      
+      getGameRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/?status=ready&includes=GameListings&api_key=" + apiKey);
       if (g.listingRequestSent) {
         if (g.isReady()) {
-          if (!timer.isFinished()) {
-            renderImage(curPos);
-            drawSelectedPad(curPosKey);
-          } else {
-            if (g.listings.size() > 0) {
-              if (g.successfulHits <= treasurySize) {
-                updatePos();
-                g.setNextListing(); // next curListing is ready
-                
-                println("Currently displaying " + g.curListing.getListingID() + " at " + (curPosKey+1));
-                // todo: figure out how to end correctly
-                timer.start();
-              } else {
-                // Game is over
-                updateGameFinishedRequest = new HTMLRequest(this, "http://api.jsheckler.ny4dev.etsy.com/v2/makerfaire/games/" + g.gameID + "/?status=played&method=PUT");
-                updateGameFinishedRequest.makeRequest(); // Send current game status 
-                newGameRequested = false;
-                gameID = -1; // set to -1 so that next draw loop will trigger new game start
-              }
+          if (g.timeInPlay < gameTimeLimit) {
+            if (!timer.isFinished()) {
+              renderImage(curPos);
+              drawSelectedPad(curPosKey);
             } else {
-              println("No listings");
-            }
-          } // end else case for timer
-        } // end check for ready
+              if (g.listings.size() > 0) {
+                if (g.successfulHits < treasurySize) {
+                  updatePos();
+                  g.setNextListing(); // next curListing is ready
+                  timer.start();
+                } else {
+                  // Game is over
+                  updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/?status=played&method=PUT&api_key=" + apiKey);
+                  updateGameFinishedRequest.makeRequest(); // Send current game status 
+                  newGameRequested = false;
+                  gameID = -1; // set to -1 so that next draw loop will trigger new game start
+                }
+              } else {
+                println("No listings");
+              }
+            } // end else case for timer
+            g.updateGameTime();
+          } else {
+            gameID = -1;
+          } // end game-length case
+        } 
       } else {
           getGameRequest.makeRequest();
 //          println("made game request");
@@ -124,13 +138,11 @@ void draw() {
     }
     deadGameCount++;    
   }
-  
-  if (deadGameCount > 200) {
+  if (deadGameCount > 1000) {
     println("Out of games to play!");
     exit();
-  }
+  } 
 }
-
 
 // in response from simpleML, set gameRequested back to false
 void netEvent(HTMLRequest ml) {
@@ -165,7 +177,7 @@ void netEvent(HTMLRequest ml) {
           println("The last game loaded had null listings!");
           gameID = -1;
           if (killGameRequest == false) {
-            updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + jsonGame.get("game_id") + "/?status=played&method=PUT");
+            updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + jsonGame.get("game_id") + "/?status=played&method=PUT&api_key=" + apiKey);
             updateGameFinishedRequest.makeRequest(); // Send current game status
             killGameRequest = true;
           }
@@ -191,7 +203,7 @@ void mousePressed() {
     if (newGameRequested == false) {
       findAllGamesRequest.makeRequest();
       newGameRequested = true;
-      println("Requested game" + newGameRequested);
+      println("Requested game");
       updatePos();  
     } else {
       println("Keep waiting for game...");
@@ -212,7 +224,7 @@ void renderImage(Coord pos) {
   try {
     image(current.getImage(), ((boardX/2)-(imgSize/2)), (offset), imgSize, imgSize);
   } catch(Exception e) {
-    println("Null pointer exception on image");
+    image(defaultImage, ((boardX/2)-(imgSize/2)), (offset), imgSize, imgSize);
   }
 } 
 
@@ -224,25 +236,38 @@ void updatePos() {
 void drawBoard() {
   // Fill background
   background(255);
-  if (gameID == lastGameID || gameID == -1) { // prompt
-    fill(255, 143, 0);
-    text("Are you ready?", (boardX/2 - 120), 220);
-  }
+  
   // draw image target board
   
-  stroke(255, 0,0);
-  for (int i = 0; i < numSquares; i++) {
-    Coord coord = origins[i];
-    int offsetX = (coord.x * 5 * offset) + offset + (boardX/2 - 280); //offset from left of board
-    int offsetY = (coord.y * 5 * offset) + offset + (boardY - 380); //offset from bottom of board
-    stroke(208, 211,179);
-    fill(224,228,204);
-    rect(offsetX, offsetY, rectSize, rectSize);
-    fill(255, 182, 88);
-    textFont(bigFont);
-    text(i+1, offsetX + 48, offsetY + 106);
-    textFont(font);
+  if (false) {
+    fill(255, 143, 0);
+  
+     drawMessage("Are you ready?");
+  } else {
+    strokeWeight(10);  // Beastly
+    for (int i = 0; i < numSquares; i++) {
+      Coord coord = origins[i];
+      int offsetX = (coord.x * (rectSize + 10)) + 150; //offset from left of board
+      int offsetY = (coord.y * (rectSize + 10)) + ((boardY - (2*rectSize)) / 2); //offset from bottom of board
+      if (i % 2 == 0) {
+        stroke(redStroke);
+        fill(redFill); 
+      } else {
+        stroke(yellowStroke);
+        fill(yellowFill); 
+      }
+      
+      rect(offsetX, offsetY, rectSize, rectSize);
+      fill(255, 182, 88);
+      textFont(bigFont);
+      text(i+1, offsetX + 48, offsetY + 106);
+      textFont(font);
+    }
   }
+}
+
+void drawMessage(String message) {
+  text(message, (boardX/2 - 120), 220);
 }
 
 void drawSelectedPad(int index) {
@@ -265,34 +290,71 @@ void keyPressed() { // this will become serialEvent
   String thisShit = "whacked"; // yo
   
   Integer k = (Integer)Character.digit(key, 10);
-  if (g.hashCode() > 0) {
+  if (g != null) {
+    println("press " + g.gameID);
     if (k.equals((Integer)curPosKey+1)) {
-      g.successfulHits++;
-      if (g.successfulHits <= treasurySize) {
-        updateGameListingsRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
-        updateGameListingsRequest.makeRequest(); 
-      }
+      if (g.successfulHits < treasurySize) {
+        try {
+          if (g.curListing.submitted == false) {
+            updateGameListingsRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT&api_key=" + apiKey);  
+            updateGameListingsRequest.makeRequest(); 
+            playWin();
+            g.curListing.submitted = true;
+            g.successfulHits++;
+          }
+        } catch(NullPointerException e) {
+          // a bad listing was loaded, no big deal
+          println("Fail!");
+          playFail();
+        }
+      } 
+    } else {
+      playFail();
     } 
     g.totalHits++;
+  } else {
+    println("dead press");
   }
 }
 
-void serialEvent(Serial p) { 
-  String inString = p.readString(); 
+void playWin() {
+  win.play(0);
+} 
 
-  // set up whack event
-  // prepare hit request, but don't make it until hit
-  String thisShit = "whacked"; // yo
+void playFail() {
+  fail.play(0);
+} 
+/*
+void serialEvent(Serial p) { 
+  // Set game status
+  String thisShit = "whacked"; // yo 
   
-  Integer k = (Integer)inString;
-  if (g.hashCode() > 0) {
-    if (k.equals((Integer)curPosKey+1)) {
-      g.successfulHits++;
-      if (g.successfulHits <= treasurySize) {
-        updateGameListingsRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
-        updateGameListingsRequest.makeRequest(); 
+  while (myPort.available() > 0) {
+    int inByte = p.read();
+    println(inByte);
+    println(curPosKey);
+    if (g != null) {
+      if (inByte == curPosKey && g.curListing.submitted == false) {
+        g.successfulHits++;
+        println("HUGE SUCCESS on input " + curPosKey);
+
+        if (g.successfulHits <= treasurySize) {
+          g.curListing.submitted = true;   
+          updateGameListingsRequest = new HTMLRequest(this, apiBase + "games/" + g.gameID + "/listings/" + g.curListing.getListingID() + "/?status=" + thisShit + "&method=PUT");  
+          updateGameListingsRequest.makeRequest();    
+        }
       }
-    } 
-    g.totalHits++;
+    }
   }
+  g.totalHits++;
+}
+*/
+
+void stop() {
+  // always close Minim audio classes when you are done with them
+  win.close();
+  fail.close();
+  // always stop Minim before exiting
+  minim.stop();
+  super.stop();
 }
