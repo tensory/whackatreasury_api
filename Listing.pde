@@ -1,6 +1,7 @@
 class Listing {
-  private int listingID;
+  private int listingID = 0;
   private PImage img; // Prevent image from being overwritten
+  boolean submitted = false;
   
   Listing (int id) {
     listingID = id;
@@ -15,3 +16,5 @@ class Listing {
     return listingID;
  } 
 }
+
+
