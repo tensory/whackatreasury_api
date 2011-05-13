@@ -9,6 +9,7 @@ class Game {
   int successfulHits;
   boolean listingRequestSent = false;
   boolean ready = false;
+  long timeInPlay;
   
   Listing curListing;
   Stack listings = new Stack();
@@ -22,11 +23,10 @@ class Game {
     successfulHits = 0;
     treasurySize = 3;
     ready = false;
+    timeInPlay = millis();
   }
   
   void loadListings(JSONArray listings) {
-    // limit listings to 15 just for the local demo. Remove when using full set of Etsy images
-
     try {
       for (int j = 0; j < listings.length(); j++) {
         JSONObject listing = (JSONObject)listings.get(j); 
@@ -51,5 +51,9 @@ class Game {
   
   void setRequestSent(boolean wasSent) {
     this.listingRequestSent = wasSent;
+  }
+  
+  void updateGameTime() {
+    this.timeInPlay = millis();
   }
 }
