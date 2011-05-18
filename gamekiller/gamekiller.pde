@@ -1,6 +1,9 @@
 /**
 Whack-A-Treasury Game Shutdown
 by Ari Lacenski for Etsy / 2011
+
+Only run this script to delete ALL games from the current queue!
+... does it create treasuries? Ask Justin
 */
 
 import simpleML.*;
