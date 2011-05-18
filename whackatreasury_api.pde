@@ -366,6 +366,7 @@ void serialEvent(Serial p) {
   String thisShit = "whacked"; // yo 
   while (myPort.available() > 0) {
     int inByte = p.read();
+    println(inByte);
     if (g != null) {
       if (inByte == curPosKey && g.curListing.submitted == false) {
         g.successfulHits++;
