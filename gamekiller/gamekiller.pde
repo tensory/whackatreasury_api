@@ -42,7 +42,7 @@ void netEvent(HTMLRequest ml) {
         for (int i = 0; i < results.length(); i++) {
           JSONObject jsonGame = (JSONObject)results.get(i);
           String id = jsonGame.get("game_id").toString();
-          updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + id + "/?status=played&method=PUT&api_key=" + apiKey);
+          updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + id + "/?status=finished&method=PUT&api_key=" + apiKey);
           updateGameFinishedRequest.makeRequest(); // Kill game
           println("Killed game " + id);
         }
