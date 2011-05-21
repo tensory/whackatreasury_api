@@ -17,7 +17,7 @@ void setup() {
     pinMode(pinNum, OUTPUT);
     digitalWrite(pinNum, LOW);
   }
-  //digitalWrite(outputPin, LOW);
+  digitalWrite(outputPin, LOW);
   Serial.begin(9600);
 }
 

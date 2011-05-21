@@ -12,6 +12,7 @@ import org.json.*;
 Minim minim;
 AudioSnippet win;
 AudioSnippet fail;
+AudioSnippet woop;
 
 // Game world parameters
 Game g;
@@ -21,7 +22,7 @@ boolean newGameRequested = false;
 String source = "";
 String apiBase = "http://openapi.etsy.com/v2/makerfaire/";
 String apiKey = "39u9vrafahzsw66cvvh4j85x";
-PImage defaultImage;
+PImage defaultImage, readyImage;
 int numSquares = 6;
 Coord[] origins = new Coord[numSquares];
 // set up target origins
@@ -39,7 +40,7 @@ int offset = 34;
 int rectSize = 290;
 int imgSize = rectSize - 10;
 int boardX = 1280;
-int boardY = 720;
+int boardY = 680;
 int treasurySize = 12;
 int deadGameCount = 0;
 long gameTimeLimit = 180000; // 3 minutes
@@ -80,12 +81,15 @@ void setup() {
   findAllGamesRequest = new HTMLRequest(this, apiBase + "games?status=ready&limit=1&api_key=" + apiKey);
   
   minim = new Minim(this);
-  win = minim.loadSnippet("sounds/beep-10.mp3");
-  fail = minim.loadSnippet("sounds/beep-10.mp3");
-  timer = new Timer(4000); // display image in millis
+  win = minim.loadSnippet("sounds/Bell.mp3");
+  fail = minim.loadSnippet("sounds/Buzz.mp3");
+  win = minim.loadSnippet("sounds/WoopWoop.mp3");
+  
+  timer = new Timer(2000); // display image in millis
   
   myPort = new Serial(this, Serial.list()[0], 9600); // init serial port
   defaultImage = loadImage("extras/default.jpg");
+  readyImage = loadImage("extras/ready.png");
   textFont(font);
 }
 
@@ -106,12 +110,15 @@ void draw() {
           if (g.timeInPlay < gameTimeLimit) {
             if (!timer.isFinished()) {
               renderImage(curPos);
-              myPort.write(curPosKey);
+              myPort.clear();
+              myPort.write(curPosKey+1);
             } else {
               if (g.listings.size() > 0) {
                 if (g.successfulHits < treasurySize) {
                   updatePos();
                   g.setNextListing(); // next curListing is ready
+                  drawBoard();
+                  delay(1000);
                   timer.start();
                 } else {
                   // Game is over
@@ -136,8 +143,9 @@ void draw() {
     }
   } else {
     if (gameID == -1) {
-      if (millis() - endTime < 4000) {
+      if (millis() - endTime < 15000) {
         // Do nothing! Print WINNING
+        myPort.clear();
         myPort.write(9);
       } else {
         setup();
@@ -187,6 +195,8 @@ void netEvent(HTMLRequest ml) {
           // Endgame state
           endTime = millis();
           println("The last game loaded had null listings!");
+          myPort.write(9);
+          woop.play(0);
           gameID = -1;
           if (killGameRequest == false) {
             updateGameFinishedRequest = new HTMLRequest(this, apiBase + "games/" + jsonGame.get("game_id") + "/?status=played&method=PUT&api_key=" + apiKey);
@@ -268,15 +278,15 @@ void drawBoard() {
   strokeWeight(8);
   stroke(greenLine);
   fill(darkBg);
-  rect(30, 30, (boardX - 60), (boardY - 60));
+  rect(145, 30, 990, (boardY - 60));
   
   // draw image target board
   if (gameID < 1) {
     fill(255, 143, 0);
     if (gameID == 0) {
-      drawMessage("Are you ready?");
+      image(readyImage, 420, 290, 453, 51);
     } else {
-      drawMessage("WINNING!");
+      drawMessage("A WINNER IS YOU!");
     }
   } else {
     strokeWeight(10);  // Beastly
@@ -304,27 +314,30 @@ void drawBoard() {
 void drawMessage(String message) {
   text(message, (boardX/2 - 120), 220);
 }
-/*
-void drawSelectedPad(int index) {
-    Coord coord = origins[index];
-    int offsetX = (coord.x * 5 * offset) + offset + (boardX/2 - 280); //offset from left of board
-    int offsetY = (coord.y * 5 * offset) + offset + (boardY - 380); //offset from bottom of board
-    stroke(208, 211,179);
-    fill(0,0,255);
-    rect(offsetX, offsetY, rectSize, rectSize);
-    fill(255, 255, 255);
-    textFont(bigFont);
-    text(index+1, offsetX + 48, offsetY + 106);
-    
-    textFont(font);
+
+void keyPressed() { // this will become serialEvent
+  try {
+    if (newGameRequested == false) {
+      findAllGamesRequest.makeRequest();
+      newGameRequested = true;
+      println("Requested game");
+      updatePos();  
+    } else {
+      println("Keep waiting for game...");
+    }
+  } catch (Exception e) { // this doesn't actually get caught here :(
+    // if there's a connection error, reset everything
+    newGameRequested = false;
+  }
 }
-*/
+/*
 void keyPressed() { // this will become serialEvent
   // set up whack event
   // prepare hit request, but don't make it until hit
   String thisShit = "whacked"; // yo
   
   Integer k = (Integer)Character.digit(key, 10);
+  myPort.clear();
   myPort.write(k);
   if (g != null) {
     println("press " + g.gameID);
@@ -352,7 +365,7 @@ void keyPressed() { // this will become serialEvent
     println("dead press");
   }
 }
-
+*/
 void playWin() {
   win.play(0);
 } 
